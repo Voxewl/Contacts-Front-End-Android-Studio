@@ -10,7 +10,7 @@ object RetrofitClient {
     // ⚠️ IMPORTANTE: Cambia esta URL según tu caso
 
     // OPCIÓN 1: Si usas EMULADOR de Android Studio
-    private const val BASE_URL = "http://10.0.2.2:8000/api/"
+    private const val BASE_URL = "http://10.0.16.38:8000/api/"
 
     // OPCIÓN 2: Si usas DISPOSITIVO FÍSICO (celular/tablet)
     // Primero obtén tu IP local con: ipconfig (Windows) o ifconfig (Mac/Linux)

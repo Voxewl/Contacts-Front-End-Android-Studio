@@ -5,23 +5,24 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.examenrecu.models.User
 import com.example.examenrecu.viewmodel.UserViewModel
@@ -46,14 +47,12 @@ fun UserFormScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val isEditMode = userId != null
 
-    // Determinar qué permiso usar según la versión de Android
     val imagePermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_IMAGES
     } else {
         Manifest.permission.READ_EXTERNAL_STORAGE
     }
 
-    // Launcher para seleccionar imagen de la galería (DEBE IR PRIMERO)
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -61,30 +60,38 @@ fun UserFormScreen(
         imageUrl = uri?.toString() ?: ""
     }
 
-    // Launcher para solicitar permisos (USA imagePickerLauncher, por eso va después)
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            // Permiso concedido, abrir galería
             imagePickerLauncher.launch("image/*")
         }
     }
 
-    // Cargar datos si es edición
     LaunchedEffect(userId) {
-        userId?.let {
-            viewModel.loadUser(it)
+        if (userId != null) {
+            // Si es edición, cargar datos
+            viewModel.loadUser(userId)
+        } else {
+            // Si es creación, limpiar formulario
+            name = ""
+            email = ""
+            phone = ""
+            imageUrl = ""
+            selectedImageUri = null
         }
     }
 
     val user by viewModel.selectedUser.collectAsState()
-    LaunchedEffect(user) {
-        user?.let {
-            name = it.name
-            email = it.email
-            phone = it.phone
-            imageUrl = it.imageUrl ?: ""
+    LaunchedEffect(user, userId) {
+        // Solo cargar datos si estamos en modo edición
+        if (userId != null) {
+            user?.let {
+                name = it.name
+                email = it.email
+                phone = it.phone
+                imageUrl = it.imageUrl ?: ""
+            }
         }
     }
 
@@ -131,26 +138,42 @@ fun UserFormScreen(
             )
 
             if (isEditMode) {
-                viewModel.updateUser(userId!!, userToSave) {
-                    onNavigateBack()
-                }
+                viewModel.updateUser(userId!!, userToSave) { onNavigateBack() }
             } else {
-                viewModel.createUser(userToSave) {
-                    onNavigateBack()
-                }
+                viewModel.createUser(userToSave) { onNavigateBack() }
             }
         }
     }
 
     Scaffold(
+        containerColor = Color.White,
         topBar = {
             TopAppBar(
-                title = { Text(if (isEditMode) "Editar Contacto" else "Nuevo Contacto") },
+                title = {
+                    Text(
+                        if (isEditMode) "Editar Contacto" else "Nuevo Contacto",
+                        fontSize = 20.sp
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver")
+                    TextButton(onClick = onNavigateBack) {
+                        Text("Cancelar", color = Color(0xFF757575))
                     }
-                }
+                },
+                actions = {
+                    TextButton(
+                        onClick = { handleSubmit() },
+                        enabled = !isLoading
+                    ) {
+                        Text(
+                            "Guardar",
+                            color = if (isLoading) Color(0xFFBDBDBD) else Color(0xFF2196F3)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White
+                )
             )
         }
     ) { padding ->
@@ -158,199 +181,243 @@ fun UserFormScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
+                .background(Color.White)
         ) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Preview de la foto
-                    Box(
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
-                            .border(
-                                width = 2.dp,
-                                color = MaterialTheme.colorScheme.primary,
-                                shape = CircleShape
-                            )
-                            .clickable {
-                                // Solicitar permiso antes de abrir galería
-                                permissionLauncher.launch(imagePermission)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (selectedImageUri != null) {
-                            AsyncImage(
-                                model = selectedImageUri,
-                                contentDescription = "Foto seleccionada",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else if (imageUrl.isNotBlank() && imageUrl.startsWith("http")) {
-                            AsyncImage(
-                                model = imageUrl,
-                                contentDescription = "Foto actual",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = "Sin foto",
-                                modifier = Modifier.size(60.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+            Spacer(modifier = Modifier.height(24.dp))
 
-                        // Ícono de cámara en la esquina
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .size(36.dp),
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = "Seleccionar foto",
-                                modifier = Modifier.padding(8.dp),
-                                tint = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFF5F5F5))
+                        .clickable { permissionLauncher.launch(imagePermission) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selectedImageUri != null) {
+                        AsyncImage(
+                            model = selectedImageUri,
+                            contentDescription = "Foto seleccionada",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else if (imageUrl.isNotBlank() && imageUrl.startsWith("http")) {
+                        AsyncImage(
+                            model = imageUrl,
+                            contentDescription = "Foto actual",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = "Sin foto",
+                            modifier = Modifier.size(50.dp),
+                            tint = Color(0xFFBDBDBD)
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = 8.dp, y = 8.dp)
+                            .size(32.dp),
+                        shape = CircleShape,
+                        color = Color.White,
+                        shadowElevation = 2.dp
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Cambiar foto",
+                            modifier = Modifier.padding(6.dp),
+                            tint = Color(0xFF757575)
+                        )
+                    }
+                }
 
-                    Text(
-                        text = "Toca para seleccionar foto",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Agregar foto",
+                    fontSize = 14.sp,
+                    color = Color(0xFF757575)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = Color(0xFF757575),
+                        modifier = Modifier.size(24.dp)
                     )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Campo Nombre
+                    Spacer(modifier = Modifier.width(16.dp))
                     OutlinedTextField(
                         value = name,
                         onValueChange = {
                             name = it
                             nameError = null
                         },
-                        label = { Text("Nombre completo *") },
+                        placeholder = { Text("Nombre completo", color = Color(0xFFBDBDBD)) },
                         modifier = Modifier.fillMaxWidth(),
                         isError = nameError != null,
-                        supportingText = {
-                            nameError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                        },
                         enabled = !isLoading,
-                        singleLine = true
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            errorBorderColor = Color.Transparent,
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        )
                     )
+                }
+                if (nameError != null) {
+                    Text(
+                        text = nameError!!,
+                        color = Color(0xFFF44336),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 40.dp, top = 4.dp)
+                    )
+                }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                Divider(color = Color(0xFFE0E0E0))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    // Campo Teléfono
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Phone,
+                        contentDescription = null,
+                        tint = Color(0xFF757575),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
                     OutlinedTextField(
                         value = phone,
                         onValueChange = {
-                            // Solo permitir números y máximo 10 dígitos
                             if (it.all { char -> char.isDigit() } && it.length <= 10) {
                                 phone = it
                                 phoneError = null
                             }
                         },
-                        label = { Text("Teléfono *") },
+                        placeholder = { Text("Teléfono", color = Color(0xFFBDBDBD)) },
                         modifier = Modifier.fillMaxWidth(),
                         isError = phoneError != null,
-                        supportingText = {
-                            if (phoneError != null) {
-                                Text(phoneError!!, color = MaterialTheme.colorScheme.error)
-                            } else {
-                                Text(
-                                    "${phone.length}/10 dígitos",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         enabled = !isLoading,
                         singleLine = true,
-                        placeholder = { Text("1234567890") }
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            errorBorderColor = Color.Transparent,
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        )
                     )
+                }
+                if (phoneError != null) {
+                    Text(
+                        text = phoneError!!,
+                        color = Color(0xFFF44336),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 40.dp, top = 4.dp)
+                    )
+                } else {
+                    Text(
+                        text = "${phone.length}/10 dígitos",
+                        color = Color(0xFF757575),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 40.dp, top = 4.dp)
+                    )
+                }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                Divider(color = Color(0xFFE0E0E0))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    // Campo Email
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Email,
+                        contentDescription = null,
+                        tint = Color(0xFF757575),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
                     OutlinedTextField(
                         value = email,
                         onValueChange = {
                             email = it
                             emailError = null
                         },
-                        label = { Text("Correo electrónico *") },
+                        placeholder = { Text("Correo electrónico", color = Color(0xFFBDBDBD)) },
                         modifier = Modifier.fillMaxWidth(),
                         isError = emailError != null,
-                        supportingText = {
-                            emailError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         enabled = !isLoading,
                         singleLine = true,
-                        placeholder = { Text("usuario@ejemplo.com") }
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Campo URL de Imagen (alternativo)
-                    OutlinedTextField(
-                        value = imageUrl,
-                        onValueChange = {
-                            imageUrl = it
-                            selectedImageUri = null // Limpiar selección local
-                        },
-                        label = { Text("O ingresa URL de foto") },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoading,
-                        singleLine = true,
-                        placeholder = { Text("https://ejemplo.com/foto.jpg") },
-                        supportingText = {
-                            Text(
-                                "Puedes usar una URL o seleccionar de la galería",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Botón de guardar
-                    Button(
-                        onClick = { handleSubmit() },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isLoading
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        } else {
-                            Text(if (isEditMode) "Actualizar Contacto" else "Guardar Contacto")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "* Campos obligatorios",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            errorBorderColor = Color.Transparent,
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        )
                     )
                 }
+                if (emailError != null) {
+                    Text(
+                        text = emailError!!,
+                        color = Color(0xFFF44336),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 40.dp, top = 4.dp)
+                    )
+                }
+
+                Divider(color = Color(0xFFE0E0E0))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "O ingresa URL de imagen:",
+                    fontSize = 12.sp,
+                    color = Color(0xFF757575),
+                    modifier = Modifier.padding(start = 40.dp)
+                )
+
+                OutlinedTextField(
+                    value = imageUrl,
+                    onValueChange = {
+                        imageUrl = it
+                        selectedImageUri = null
+                    },
+                    placeholder = { Text("https://ejemplo.com/foto.jpg", color = Color(0xFFBDBDBD)) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 40.dp),
+                    enabled = !isLoading,
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White
+                    )
+                )
             }
         }
     }

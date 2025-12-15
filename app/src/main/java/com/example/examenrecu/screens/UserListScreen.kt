@@ -6,9 +6,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,13 +38,22 @@ fun UserListScreen(
     val error by viewModel.error.collectAsState()
     val successMessage by viewModel.successMessage.collectAsState()
 
-    // Agrupar usuarios por la primera letra del nombre
-    val groupedUsers = remember(users) {
-        users.groupBy { it.name.first().uppercaseChar() }
+    var searchQuery by remember { mutableStateOf("") }
+
+    // Filtrar y agrupar usuarios
+    val filteredUsers = remember(users, searchQuery) {
+        users.filter { user ->
+            user.name.contains(searchQuery, ignoreCase = true) ||
+                    user.email.contains(searchQuery, ignoreCase = true) ||
+                    user.phone.contains(searchQuery, ignoreCase = true)
+        }
+    }
+
+    val groupedUsers = remember(filteredUsers) {
+        filteredUsers.groupBy { it.name.first().uppercaseChar() }
             .toSortedMap()
     }
 
-    // Limpiar mensajes después de mostrarlos
     LaunchedEffect(error, successMessage) {
         if (error != null || successMessage != null) {
             kotlinx.coroutines.delay(3000)
@@ -50,149 +62,185 @@ fun UserListScreen(
     }
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Contactos") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
-        },
+        containerColor = Color.White,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onCreateUserClick,
-                containerColor = MaterialTheme.colorScheme.primary
+                containerColor = Color(0xFF2196F3),
+                contentColor = Color.White
             ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Agregar contacto",
-                    tint = MaterialTheme.colorScheme.onPrimary
-                )
+                Icon(Icons.Default.Add, contentDescription = "Agregar contacto")
             }
         }
     ) { padding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .background(Color.White)
         ) {
-            when {
-                isLoading && users.isEmpty() -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
+            // Header con título
+            Text(
+                text = "Contactos",
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Normal,
+                color = Color(0xFF212121),
+                modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 12.dp)
+            )
+
+            // Barra de búsqueda
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(28.dp),
+                color = Color(0xFFF5F5F5),
+                tonalElevation = 0.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Buscar",
+                        tint = Color(0xFF757575),
+                        modifier = Modifier.size(24.dp)
+                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = LocalTextStyle.current.copy(
+                            fontSize = 16.sp,
+                            color = Color(0xFF212121)
+                        ),
+                        decorationBox = { innerTextField ->
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = "Buscar",
+                                    fontSize = 16.sp,
+                                    color = Color(0xFF757575)
+                                )
+                            }
+                            innerTextField()
+                        }
                     )
                 }
-                error != null && users.isEmpty() -> {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = error ?: "Error desconocido",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyLarge
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Lista de contactos
+            Box(modifier = Modifier.fillMaxSize()) {
+                when {
+                    isLoading && users.isEmpty() -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center),
+                            color = Color(0xFF2196F3)
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { viewModel.loadUsers() }) {
-                            Text("Reintentar")
+                    }
+                    error != null && users.isEmpty() -> {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = error ?: "Error desconocido",
+                                color = Color(0xFFF44336)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = { viewModel.loadUsers() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF2196F3)
+                                )
+                            ) {
+                                Text("Reintentar")
+                            }
                         }
                     }
-                }
-                users.isEmpty() -> {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "No hay contactos registrados",
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Presiona el botón + para agregar uno",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    filteredUsers.isEmpty() -> {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = if (searchQuery.isEmpty())
+                                    "No hay contactos registrados"
+                                else
+                                    "No se encontraron contactos",
+                                color = Color(0xFF757575)
+                            )
+                        }
                     }
-                }
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        groupedUsers.forEach { (letter, contactsForLetter) ->
-                            // Encabezado de letra
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            groupedUsers.forEach { (letter, contactsForLetter) ->
+                                // Encabezado de letra
+                                item {
+                                    Text(
+                                        text = letter.toString(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(Color.White)
+                                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF2196F3)
+                                    )
+                                }
+
+                                // Contactos de esta letra
+                                items(contactsForLetter) { user ->
+                                    ContactListItem(
+                                        user = user,
+                                        onClick = { onUserClick(user.id!!) }
+                                    )
+                                }
+                            }
+
                             item {
-                                Text(
-                                    text = letter.toString(),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
+                                Spacer(modifier = Modifier.height(80.dp))
                             }
-
-                            // Contactos de esta letra
-                            items(contactsForLetter) { user ->
-                                ContactListItem(
-                                    user = user,
-                                    onClick = { onUserClick(user.id!!) }
-                                )
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(start = 88.dp),
-                                    color = MaterialTheme.colorScheme.outlineVariant
-                                )
-                            }
-                        }
-
-                        // Espacio extra al final para el FAB
-                        item {
-                            Spacer(modifier = Modifier.height(80.dp))
                         }
                     }
                 }
-            }
 
-            // Snackbar para mensajes de error
-            error?.let {
-                Snackbar(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp),
-                    action = {
-                        TextButton(onClick = { viewModel.clearMessages() }) {
-                            Text("OK")
-                        }
-                    },
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                ) {
-                    Text(it)
+                // Snackbars
+                error?.let {
+                    Snackbar(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(16.dp),
+                        containerColor = Color(0xFFF44336),
+                        contentColor = Color.White
+                    ) {
+                        Text(it)
+                    }
                 }
-            }
 
-            // Snackbar para mensajes de éxito
-            successMessage?.let {
-                Snackbar(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp),
-                    action = {
-                        TextButton(onClick = { viewModel.clearMessages() }) {
-                            Text("OK")
-                        }
-                    },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                ) {
-                    Text(it)
+                successMessage?.let {
+                    Snackbar(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(16.dp),
+                        containerColor = Color(0xFF4CAF50),
+                        contentColor = Color.White
+                    ) {
+                        Text(it)
+                    }
                 }
             }
         }
@@ -205,30 +253,30 @@ fun ContactListItem(user: User, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Foto circular o avatar por defecto
+        // Foto circular
         if (user.imageUrl != null && user.imageUrl.isNotBlank()) {
             AsyncImage(
                 model = user.imageUrl,
                 contentDescription = "Foto de ${user.name}",
                 modifier = Modifier
-                    .size(56.dp)
+                    .size(48.dp)
                     .clip(CircleShape),
                 contentScale = ContentScale.Crop
             )
         } else {
             Surface(
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(48.dp),
                 shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer
+                color = Color(0xFFE0E0E0)
             ) {
                 Icon(
                     imageVector = Icons.Default.Person,
                     contentDescription = null,
-                    modifier = Modifier.padding(14.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    modifier = Modifier.padding(12.dp),
+                    tint = Color(0xFF757575)
                 )
             }
         }
@@ -237,23 +285,19 @@ fun ContactListItem(user: User, onClick: () -> Unit) {
 
         // Información del contacto
         Column(modifier = Modifier.weight(1f)) {
-            // Nombre en negritas y más grande
             Text(
                 text = user.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Bold,
                 fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onSurface
+                fontWeight = FontWeight.Normal,
+                color = Color(0xFF212121)
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
-            // Email en texto secundario
             Text(
                 text = user.email,
-                style = MaterialTheme.typography.bodyMedium,
                 fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Color(0xFF757575)
             )
         }
     }
